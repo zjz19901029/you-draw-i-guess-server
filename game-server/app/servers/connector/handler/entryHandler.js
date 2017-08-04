@@ -31,6 +31,8 @@ Handler.prototype.enterServer = function(msg, session, next) {
 	session.bind(uid);
 	session.set("name",msg.name);
 	session.set("avatar",msg.avatar);
+	session.push("name");
+	session.push("avatar");
 
 	var sid = this.app.get('serverId');
 
@@ -101,6 +103,8 @@ var onUserLeaveRoom = function(app,rid, session) {
     if(!session || !session.uid) {
         return;
     }
+    session.set("rid","");
+    session.push("rid");
     app.rpc.room.roomRemote.kick(session, session.uid, app.get('serverId'), rid, null);
 };
 /**

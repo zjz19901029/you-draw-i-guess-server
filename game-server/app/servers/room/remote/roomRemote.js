@@ -169,5 +169,4 @@ RoomRemote.prototype.kick = function(uid, sid, name) {
         });
         delete this.userInfo[uid]
     }
-
 };

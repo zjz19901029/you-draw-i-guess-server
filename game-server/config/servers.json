@@ -1,22 +1,22 @@
 {
  "development":{
       "connector":[
-           {"id":"connector-server-1", "name":"第一台服务器","maxuser":300, "host":"127.0.0.1", "port":4050, "clientPort": 3050, "frontend": true},
-           {"id":"connector-server-2", "name":"第二台服务器","maxuser":300, "host":"127.0.0.1", "port":4051, "clientPort": 3051, "frontend": true},
-           {"id":"connector-server-3", "name":"第三台服务器","maxuser":300, "host":"127.0.0.1", "port":4052, "clientPort": 3052, "frontend": true}
+           {"id":"connector-server-1", "name":"第一台服务器","maxuser":300, "host":"10.100.33.129", "port":4050, "clientPort": 3050, "frontend": true},
+           {"id":"connector-server-2", "name":"第二台服务器","maxuser":300, "host":"10.100.33.129", "port":4051, "clientPort": 3051, "frontend": true},
+           {"id":"connector-server-3", "name":"第三台服务器","maxuser":300, "host":"10.100.33.129", "port":4052, "clientPort": 3052, "frontend": true}
        ],
       "draw":[
-           {"id":"draw-server-1", "host":"127.0.0.1", "port":6050},
-           {"id":"draw-server-2", "host":"127.0.0.1", "port":6051},
-           {"id":"draw-server-3", "host":"127.0.0.1", "port":6052}
+           {"id":"draw-server-1", "host":"10.100.33.129", "port":6050},
+           {"id":"draw-server-2", "host":"10.100.33.129", "port":6051},
+           {"id":"draw-server-3", "host":"10.100.33.129", "port":6052}
       ],
        "room":[
-         {"id":"room-server-1", "host":"127.0.0.1","rooms":50, "port":7050},
-         {"id":"room-server-2", "host":"127.0.0.1","rooms":50, "port":7051},
-         {"id":"room-server-3", "host":"127.0.0.1","rooms":50, "port":7052}
+         {"id":"room-server-1", "host":"10.100.33.129","rooms":50, "port":7050},
+         {"id":"room-server-2", "host":"10.100.33.129","rooms":50, "port":7051},
+         {"id":"room-server-3", "host":"10.100.33.129","rooms":50, "port":7052}
        ],
       "gate":[
-       {"id": "gate-server-1", "host": "127.0.0.1", "clientPort": 3010, "frontend": true,"args": "--debug=5858"}
+       {"id": "gate-server-1", "host": "10.100.33.129", "clientPort": 3010, "frontend": true,"args": "--debug=5858"}
     ]
   },
   "production":{

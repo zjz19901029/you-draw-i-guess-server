@@ -20,11 +20,15 @@ let handler = Handler.prototype;
  */
 handler.send = function(msg, session, next) {
 	const rid = session.get('rid');
-	const username = session.uid.split('*')[0];
+	const uid = session.uid;
+	const username = session.get('name');
 	const channelService = this.app.get('channelService');
 	let param = {
 		msg: msg.content,
-		from: username,
+		from: {
+			uid: uid,
+			username: username
+		},
 		target: msg.target
 	};
 	channel = channelService.getChannel(rid, false);
@@ -43,6 +47,7 @@ handler.send = function(msg, session, next) {
 		}]);
 	}
 	next(null, {
+		code:200,
 		route: msg.route
 	});
 };
