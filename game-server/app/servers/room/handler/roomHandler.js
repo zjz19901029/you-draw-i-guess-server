@@ -8,7 +8,7 @@ const Handler = function(app) {
 	this.app = app;
 };
 
-let handler = Handler.prototype;
+var handler = Handler.prototype;
 
 /**
  * Send messages to users
@@ -18,12 +18,12 @@ let handler = Handler.prototype;
  * @param  {Function} next next stemp callback
  *
  */
-handler.send = function(msg, session, next) {
+handler.sendMsg = function(msg, session, next) {
 	const rid = session.get('rid');
 	const uid = session.uid;
 	const username = session.get('name');
 	const channelService = this.app.get('channelService');
-	let param = {
+	var param = {
 		msg: msg.content,
 		from: {
 			uid: uid,
@@ -51,3 +51,4 @@ handler.send = function(msg, session, next) {
 		route: msg.route
 	});
 };
+

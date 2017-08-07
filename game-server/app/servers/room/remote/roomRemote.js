@@ -1,3 +1,6 @@
+var fs = require('fs');
+var path = require('path');
+
 module.exports = function(app) {
 	return new RoomRemote(app);
 };
@@ -5,11 +8,22 @@ module.exports = function(app) {
 var RoomRemote = function(app) {
 	this.app = app;
 	this.channelService = app.get('channelService');
-	this.userInfo = {};
-    this.roomList = [];
+	this.app.set('userInfo',{});
+    this.app.set('roomList',[]);
+    this.gameData = {};
+    this.app.set('gameData',this.gameData);
+    this.timeCounts = {};
 };
 
+var wordConfig = [
+    {type:"动物",file:"animal.json"},
+    {type:"成语",file:"chengyu.json"},
+    {type:"日常用品",file:"dailyuse.json"},
+    {type:"食物",file:"food.json"},
+    {type:"运动",file:"sport.json"}
+]
 
+var gameTime = 90;
 
 /**
  * Add user into chat channel.
@@ -21,24 +35,27 @@ var RoomRemote = function(app) {
  *
  */
 RoomRemote.prototype.add = function(user, sid, name, flag, cb) {
-	if(this.roomList.length == 0){//初始化各房间数据
+    var roomList = this.app.get('roomList');
+    var userInfo = this.app.get('userInfo');
+	if(roomList.length == 0){//初始化各房间数据
         var serverId = this.app.get('serverId');
         var connector = this.app.getServerById(serverId);
         var roomsNum = connector.rooms;
-        this.roomList = new Array(roomsNum);
+        roomList = new Array(roomsNum);
         for(var i = 0;i<roomsNum;i++){
-            this.roomList[i] = {
+            roomList[i] = {
                 players:[],
                 maxPlayer:6,
                 state:0  //0：未开始，1：游戏中
             };
         }
+        this.app.set('roomList',roomList);
 	}
 
 	var isServer = sid == name?true:false;
 
 	if(!isServer){
-	    if(this.roomList[name].state == 1){
+	    if(roomList[name].state == 1){
 	        cb({
                 code:500,
                 error:2,
@@ -46,7 +63,7 @@ RoomRemote.prototype.add = function(user, sid, name, flag, cb) {
             })
             return;
         }
-        if(this.roomList[name].players.length == this.roomList[name].maxPlayer){
+        if(roomList[name].players.length == roomList[name].maxPlayer){
             cb({
                 code:500,
                 error:1,
@@ -76,11 +93,14 @@ RoomRemote.prototype.add = function(user, sid, name, flag, cb) {
                     roomId: name
                 });
             }
-            this.roomList[name].players.push(user);
+            user.score = 0;//初始化分数
+            roomList[name].players.push(user);
+            this.app.set('roomList',roomList);
             data.userList = this.get(name, false);
         }
 
-        this.userInfo[user.uid] = user;
+        userInfo[user.uid] = user;
+        this.app.set('userInfo',userInfo);
 
         cb(data);
 	}else{
@@ -96,7 +116,7 @@ RoomRemote.prototype.getAllInfo = function(sid,cb) {
     cb({
         code: 200,
         userList: this.get(sid, false),
-        roomList: this.roomList
+        roomList: this.app.get('roomList')
     });
 }
 
@@ -110,14 +130,15 @@ RoomRemote.prototype.getAllInfo = function(sid,cb) {
  *
  */
 RoomRemote.prototype.get = function(name, flag) {
+    var userInfo = this.app.get('userInfo');
 	var users = [];
 	var channel = this.channelService.getChannel(name, flag);
 	if( !! channel) {
 		users = channel.getMembers();
 	}
 	for(var i =0;i<users.length;i++){
-		if(this.userInfo[users[i]]){
-			users[i] = this.userInfo[users[i]];
+		if(userInfo[users[i]]){
+			users[i] = userInfo[users[i]];
 		}else{
             users[i] = {uid:users[i]};
 		}
@@ -134,6 +155,8 @@ RoomRemote.prototype.get = function(name, flag) {
  *
  */
 RoomRemote.prototype.kick = function(uid, sid, name) {
+    var userInfo = this.app.get('userInfo');
+    var roomList = this.app.get('roomList');
 	var channel = this.channelService.getChannel(name, false);
 	var isServer = sid==name?true:false;
 	// leave channel
@@ -141,8 +164,8 @@ RoomRemote.prototype.kick = function(uid, sid, name) {
 		channel.leave(uid, sid);
 	}
 	var user = {uid:uid};
-	if(this.userInfo[uid]){
-        user = this.userInfo[uid]
+	if(userInfo[uid]){
+        user = userInfo[uid]
 	}
 	if(!isServer){
         var channelServer = this.channelService.getChannel(sid, false);
@@ -158,15 +181,174 @@ RoomRemote.prototype.kick = function(uid, sid, name) {
             user:user
         });
 
-        var index = this.roomList[name].players.findIndex(function(player){
+        var index = roomList[name].players.findIndex(function(player){
             return player.uid == uid;
         });
-        this.roomList[name].players.splice(index,1);
+        roomList[name].players.splice(index,1);
+        this.app.set('roomList',roomList);
     }else{
         !! channel&&channel.pushMessage({
             route: 'onServerLeave',
             user: user
         });
-        delete this.userInfo[uid]
+        delete userInfo[uid]
+        this.app.set('userInfo',userInfo);
     }
 };
+
+
+RoomRemote.prototype.beginGame = function(uid,rid,sid,cb) {
+    var roomList = this.app.get("roomList");
+    if(!rid || !roomList[rid]){
+        cb({
+            code: 500,
+            error: 1,
+            msg: '房间不存在'
+        });
+        return;
+    }
+    if(roomList[rid].players.length<2){
+        cb({
+            code: 500,
+            error: 2,
+            msg: '玩家人数不够'
+        });
+        return;
+    }
+    if(roomList[rid].players[0].uid != uid){
+        cb({
+            code: 500,
+            error: 3,
+            msg: '您不是房主，不能开始游戏'
+        });
+        return;
+    }
+    roomList[rid].state = 1;
+    this.app.set("roomList",roomList);
+    var channelServer = this.channelService.getChannel(sid, false);
+    if( !! channelServer){//通知大厅更改房间状态
+        channelServer.pushMessage({
+            route: 'onRoomStart',
+            roomId: rid
+        });
+    }
+
+    this.startGame(rid,0);
+    var channel = this.channelService.getChannel(rid, false);
+    if( !! channel){
+        channel.pushMessage({
+            route: 'onGameBegin'
+        });
+    }
+    cb({
+        code: 200
+    });
+    return;
+};
+
+//获取随机题目
+function getAnswer(){
+    var length = wordConfig.length;
+    var index = Math.floor(Math.random()*length);
+    var filePath = path.join(__dirname,'../../../../config/answers/' + wordConfig[index].file);
+    var result = JSON.parse(fs.readFileSync(filePath));
+    var answerIndex = Math.floor(Math.random()*result.length);
+    var answer = result[answerIndex];
+    return {
+        type: wordConfig[index].type,
+        word: answer
+    }
+};
+
+RoomRemote.prototype.startGame = function(rid,index){
+    var roomList = this.app.get("roomList");
+    var room = roomList[rid];
+
+    this.gameData[rid] = {
+        players: room.players,
+        currentPlayer: index,
+        time: gameTime,
+        gameTime: gameTime,
+        currentTimes: 1,//当前轮数，一共2轮
+        answer: getAnswer()
+    };
+    this.app.set("gameData",this.gameData);
+    this.startCountTime(rid,this.gameData[rid]);
+};
+
+RoomRemote.prototype.getGameData = function(rid,cb){
+    if(this.gameData[rid]){
+        cb({
+            code:200,
+            gameData:this.gameData[rid]
+        })
+    }else{
+        cb({
+            code:500,
+            error:1,
+            msg:"游戏已结束"
+        })
+    }
+};
+
+RoomRemote.prototype.startCountTime = function(rid,currentGameData){
+    var channel = this.channelService.getChannel(rid, false);
+    var self = this;
+    this.timeCounts[rid] = setTimeout(function(){
+        if(currentGameData.time > 0&&!currentGameData.players[currentGameData.currentPlayer].isOffline){
+            currentGameData.time--;
+            if(currentGameData.gameTime/2 >= currentGameData.time){
+                if( !! channel) {
+                    channel.pushMessage({
+                        route: 'onAnswerType',
+                        type: currentGameData.answer.type
+                    });
+                }
+            }
+            channel.pushMessage({
+                route: 'onTimeout',
+                gameData: currentGameData.time
+            });
+            self.startCountTime(rid,currentGameData);
+        } else {
+            self.toNextPlayer(rid,currentGameData);
+        }
+    },1000)
+};
+
+RoomRemote.prototype.toNextPlayer = function(rid,currentGameData){
+    this.timeCounts[rid]&&clearTimeout(this.timeCounts[rid]);
+    var channel = this.channelService.getChannel(rid, false);
+    var self = this;
+    if(currentGameData.currentTimes == 2&&currentGameData.currentPlayer == (currentGameData.players.length-1)){
+        gameData[rid] = '';
+        this.app.set("gameData",gameData);
+        channel.pushMessage({
+            route: 'onGameOver',
+            players: currentGameData.players
+        });
+    }else{
+        channel.pushMessage({
+            route: 'onThisOver',
+            gameData: currentGameData
+        });
+        if(currentGameData.currentPlayer == (currentGameData.players.length-1)){
+            currentGameData.currentPlayer = 0;
+            currentGameData.currentTimes = 2;
+        }else{
+            currentGameData.currentPlayer++;
+        }
+        currentGameData.time = gameTime;
+        currentGameData.answer = getAnswer();
+
+        setTimeout(function(){
+            channel.pushMessage({
+                route: 'onChangeGamer'
+            });
+            self.app.set("gameData",this.gameData);
+            self.startCountTime(rid,currentGameData);
+        },5000);
+    }
+};
+
+

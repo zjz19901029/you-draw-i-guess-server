@@ -83,6 +83,21 @@ Handler.prototype.leaveRoom = function(msg, session) {
     onUserLeaveRoom(this.app,rid,session);
 }
 
+Handler.prototype.beginGame = function(msg, session, next) {
+    var sid = this.app.get('serverId');
+    var rid = session.get("rid");
+    this.app.rpc.room.roomRemote.beginGame(session,session.uid, rid, sid, function(data){
+        next(null, data);
+    });
+}
+
+Handler.prototype.getGameData = function(msg, session, next) {
+    var sid = this.app.get('serverId');
+    var rid = session.get("rid");
+    this.app.rpc.room.roomRemote.getGameData(session, rid, function(data){
+        next(null, data);
+    });
+}
 
 
 /**
