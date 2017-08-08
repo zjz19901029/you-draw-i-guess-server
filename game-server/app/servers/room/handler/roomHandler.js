@@ -52,3 +52,16 @@ handler.sendMsg = function(msg, session, next) {
 	});
 };
 
+handler.drawAction = function(msg, session, next){
+    const rid = session.get('rid');
+    const channelService = this.app.get('channelService');
+    const channel = channelService.getChannel(rid, false);
+    channel.pushMessage('onDrawAction', msg);
+};
+
+handler.drawImage = function(msg, session, next){
+    const rid = session.get('rid');
+    const channelService = this.app.get('channelService');
+    const channel = channelService.getChannel(rid, false);
+    channel.pushMessage('onDrawImage', msg);
+};

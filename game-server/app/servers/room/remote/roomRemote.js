@@ -23,7 +23,7 @@ var wordConfig = [
     {type:"运动",file:"sport.json"}
 ]
 
-var gameTime = 90;
+var gameTime = 60;
 
 /**
  * Add user into chat channel.
@@ -44,6 +44,7 @@ RoomRemote.prototype.add = function(user, sid, name, flag, cb) {
         roomList = new Array(roomsNum);
         for(var i = 0;i<roomsNum;i++){
             roomList[i] = {
+                sid:sid,
                 players:[],
                 maxPlayer:6,
                 state:0  //0：未开始，1：游戏中
@@ -196,7 +197,7 @@ RoomRemote.prototype.kick = function(uid, sid, name) {
     }
 };
 
-
+//开始游戏初始化
 RoomRemote.prototype.beginGame = function(uid,rid,sid,cb) {
     var roomList = this.app.get("roomList");
     if(!rid || !roomList[rid]){
@@ -260,6 +261,7 @@ function getAnswer(){
     }
 };
 
+//开始游戏逻辑
 RoomRemote.prototype.startGame = function(rid,index){
     var roomList = this.app.get("roomList");
     var room = roomList[rid];
@@ -269,6 +271,7 @@ RoomRemote.prototype.startGame = function(rid,index){
         currentPlayer: index,
         time: gameTime,
         gameTime: gameTime,
+        imageData: '',
         currentTimes: 1,//当前轮数，一共2轮
         answer: getAnswer()
     };
@@ -276,6 +279,7 @@ RoomRemote.prototype.startGame = function(rid,index){
     this.startCountTime(rid,this.gameData[rid]);
 };
 
+//获取游戏数据
 RoomRemote.prototype.getGameData = function(rid,cb){
     if(this.gameData[rid]){
         cb({
@@ -291,10 +295,33 @@ RoomRemote.prototype.getGameData = function(rid,cb){
     }
 };
 
+//开始游戏倒计时
 RoomRemote.prototype.startCountTime = function(rid,currentGameData){
     var channel = this.channelService.getChannel(rid, false);
     var self = this;
     this.timeCounts[rid] = setTimeout(function(){
+        var roomList = self.app.get("roomList");
+        var notOffLineNum = 0;
+        currentGameData.players.forEach(function(p) {
+            if (roomList[rid].players.find(function (e) {
+                    return e.uid == p.uid;
+                })) {
+                p.isOffline = false;
+            } else {
+                p.isOffline = true;
+            }
+            if (!p.isOffline) {
+                notOffLineNum++;
+            }
+        });
+        if(notOffLineNum<2){//少于2人的时候 直接结束游戏
+            self.gameOver(rid,currentGameData);
+            return;
+        }
+        if(currentGameData.players[currentGameData.currentPlayer].isOffline){//当前画画用户离线，直接跳过
+            self.toNextPlayer(rid,currentGameData);
+            return;
+        }
         if(currentGameData.time > 0&&!currentGameData.players[currentGameData.currentPlayer].isOffline){
             currentGameData.time--;
             if(currentGameData.gameTime/2 >= currentGameData.time){
@@ -307,7 +334,7 @@ RoomRemote.prototype.startCountTime = function(rid,currentGameData){
             }
             channel.pushMessage({
                 route: 'onTimeout',
-                gameData: currentGameData.time
+                time: currentGameData.time
             });
             self.startCountTime(rid,currentGameData);
         } else {
@@ -316,22 +343,20 @@ RoomRemote.prototype.startCountTime = function(rid,currentGameData){
     },1000)
 };
 
+//下一个玩家
 RoomRemote.prototype.toNextPlayer = function(rid,currentGameData){
     this.timeCounts[rid]&&clearTimeout(this.timeCounts[rid]);
     var channel = this.channelService.getChannel(rid, false);
     var self = this;
+    channel.pushMessage({
+        route: 'onThisOver',
+        gameData: currentGameData
+    });
     if(currentGameData.currentTimes == 2&&currentGameData.currentPlayer == (currentGameData.players.length-1)){
-        gameData[rid] = '';
-        this.app.set("gameData",gameData);
-        channel.pushMessage({
-            route: 'onGameOver',
-            players: currentGameData.players
-        });
+        setTimeout(function(){
+            self.gameOver(rid,currentGameData);
+        },5000);
     }else{
-        channel.pushMessage({
-            route: 'onThisOver',
-            gameData: currentGameData
-        });
         if(currentGameData.currentPlayer == (currentGameData.players.length-1)){
             currentGameData.currentPlayer = 0;
             currentGameData.currentTimes = 2;
@@ -350,5 +375,27 @@ RoomRemote.prototype.toNextPlayer = function(rid,currentGameData){
         },5000);
     }
 };
+
+//游戏结束
+RoomRemote.prototype.gameOver = function(rid,currentGameData){
+    this.timeCounts[rid]&&clearTimeout(this.timeCounts[rid]);
+    this.gameData[rid] = '';
+    this.app.set("gameData",this.gameData);
+    var roomList = this.app.get("roomList");
+    roomList[rid].state = 0;
+    this.app.set("roomList",roomList);
+    var channelServer = this.channelService.getChannel(roomList[rid].sid, false);
+    if( !! channelServer){//通知大厅更改房间状态
+        channelServer.pushMessage({
+            route: 'onRoomGameOver',
+            roomId: rid
+        });
+    }
+    var channel = this.channelService.getChannel(rid, false);
+    channel.pushMessage({
+        route: 'onGameOver',
+        players: currentGameData.players
+    });
+}
 
 

@@ -92,7 +92,6 @@ Handler.prototype.beginGame = function(msg, session, next) {
 }
 
 Handler.prototype.getGameData = function(msg, session, next) {
-    var sid = this.app.get('serverId');
     var rid = session.get("rid");
     this.app.rpc.room.roomRemote.getGameData(session, rid, function(data){
         next(null, data);
