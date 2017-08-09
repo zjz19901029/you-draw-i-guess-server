@@ -1,4 +1,11 @@
 const roomRemote = require('../remote/roomRemote');
+var COMMON = require('../common/common');
+
+var scoreCount = {
+    1:3,
+    2:2,
+    3:1
+};
 
 module.exports = function(app) {
 	return new Handler(app);
@@ -6,6 +13,9 @@ module.exports = function(app) {
 
 const Handler = function(app) {
 	this.app = app;
+    this.roomRemote = roomRemote(app);
+    this.roomList = COMMON.roomList;
+    this.gameData = COMMON.gameData;
 };
 
 var handler = Handler.prototype;
@@ -23,14 +33,21 @@ handler.sendMsg = function(msg, session, next) {
 	const uid = session.uid;
 	const username = session.get('name');
 	const channelService = this.app.get('channelService');
-	var param = {
-		msg: msg.content,
-		from: {
-			uid: uid,
-			username: username
-		},
-		target: msg.target
-	};
+
+    var param = {
+        msg: msg.content,
+        from: {
+            uid: uid,
+            username: username
+        },
+        target: msg.target
+    };
+    var score;
+    if(score = this.judgeAnswer(msg, rid, uid)){
+        param.answerRight = true;
+        param.score = score;
+    }
+
 	channel = channelService.getChannel(rid, false);
 
 	//the target is all users
@@ -51,6 +68,41 @@ handler.sendMsg = function(msg, session, next) {
 		route: msg.route
 	});
 };
+
+handler.judgeAnswer = function(msg, rid, uid){//判断答案正确
+    var gameData = this.gameData[rid];
+    var score = 0;
+    var currentPlayer = gameData.players[gameData.currentPlayer];
+    if(this.roomList[rid].state == 1&&currentPlayer.uid != uid){//正在游戏中，且当前用户不是画画者，判断是否猜对
+        if(msg.content.trim() == gameData.answer.word){
+            gameData.answerRightNum++;
+            score = gameData.answerRightNum>3?scoreCount[3]:scoreCount[gameData.answerRightNum];
+            currentPlayer.score++;
+            var me = gameData.players.find(p => {
+               return p.uid == uid;
+            });
+            me.score += score;
+            const channelService = this.app.get('channelService');
+            channel = channelService.getChannel(rid, false);
+            channel.pushMessage('onAnswerRight', {
+                [uid]:me.score,
+                [currentPlayer.uid]:currentPlayer.score
+            });
+            var onlineUser = 0;
+            gameData.players.forEach(p => {
+               if(!p.isOffline&&p.uid != currentPlayer.uid){
+                   onlineUser++;
+                }
+            });
+            if(gameData.answerRightNum == onlineUser){//所有人答对
+                this.roomRemote.toNextPlayer(rid,gameData);
+            }
+            return score;
+        }
+    }
+    return false;
+};
+
 
 handler.drawAction = function(msg, session, next){
     const rid = session.get('rid');

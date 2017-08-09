@@ -1,5 +1,6 @@
 var fs = require('fs');
 var path = require('path');
+var COMMON = require('../common/common');
 
 module.exports = function(app) {
 	return new RoomRemote(app);
@@ -8,11 +9,10 @@ module.exports = function(app) {
 var RoomRemote = function(app) {
 	this.app = app;
 	this.channelService = app.get('channelService');
-	this.app.set('userInfo',{});
-    this.app.set('roomList',[]);
-    this.gameData = {};
-    this.app.set('gameData',this.gameData);
-    this.timeCounts = {};
+	this.roomList = COMMON.roomList;
+	this.userInfo = COMMON.userInfo;
+	this.timeCounts = COMMON.timeCounts;
+	this.gameData = COMMON.gameData;
 };
 
 var wordConfig = [
@@ -35,28 +35,24 @@ var gameTime = 60;
  *
  */
 RoomRemote.prototype.add = function(user, sid, name, flag, cb) {
-    var roomList = this.app.get('roomList');
-    var userInfo = this.app.get('userInfo');
-	if(roomList.length == 0){//初始化各房间数据
+	if(this.roomList.length == 0){//初始化各房间数据
         var serverId = this.app.get('serverId');
         var connector = this.app.getServerById(serverId);
         var roomsNum = connector.rooms;
-        roomList = new Array(roomsNum);
         for(var i = 0;i<roomsNum;i++){
-            roomList[i] = {
+            this.roomList[i] = {
                 sid:sid,
                 players:[],
                 maxPlayer:6,
                 state:0  //0：未开始，1：游戏中
             };
         }
-        this.app.set('roomList',roomList);
 	}
 
 	var isServer = sid == name?true:false;
 
 	if(!isServer){
-	    if(roomList[name].state == 1){
+	    if(this.roomList[name].state == 1){
 	        cb({
                 code:500,
                 error:2,
@@ -64,7 +60,7 @@ RoomRemote.prototype.add = function(user, sid, name, flag, cb) {
             })
             return;
         }
-        if(roomList[name].players.length == roomList[name].maxPlayer){
+        if(this.roomList[name].players.length == this.roomList[name].maxPlayer){
             cb({
                 code:500,
                 error:1,
@@ -95,13 +91,11 @@ RoomRemote.prototype.add = function(user, sid, name, flag, cb) {
                 });
             }
             user.score = 0;//初始化分数
-            roomList[name].players.push(user);
-            this.app.set('roomList',roomList);
+            this.roomList[name].players.push(user);
             data.userList = this.get(name, false);
         }
 
-        userInfo[user.uid] = user;
-        this.app.set('userInfo',userInfo);
+        this.userInfo[user.uid] = user;
 
         cb(data);
 	}else{
@@ -117,7 +111,7 @@ RoomRemote.prototype.getAllInfo = function(sid,cb) {
     cb({
         code: 200,
         userList: this.get(sid, false),
-        roomList: this.app.get('roomList')
+        roomList: this.roomList
     });
 }
 
@@ -131,15 +125,14 @@ RoomRemote.prototype.getAllInfo = function(sid,cb) {
  *
  */
 RoomRemote.prototype.get = function(name, flag) {
-    var userInfo = this.app.get('userInfo');
 	var users = [];
 	var channel = this.channelService.getChannel(name, flag);
 	if( !! channel) {
 		users = channel.getMembers();
 	}
 	for(var i =0;i<users.length;i++){
-		if(userInfo[users[i]]){
-			users[i] = userInfo[users[i]];
+		if(this.userInfo[users[i]]){
+			users[i] = this.userInfo[users[i]];
 		}else{
             users[i] = {uid:users[i]};
 		}
@@ -156,8 +149,6 @@ RoomRemote.prototype.get = function(name, flag) {
  *
  */
 RoomRemote.prototype.kick = function(uid, sid, name) {
-    var userInfo = this.app.get('userInfo');
-    var roomList = this.app.get('roomList');
 	var channel = this.channelService.getChannel(name, false);
 	var isServer = sid==name?true:false;
 	// leave channel
@@ -165,8 +156,8 @@ RoomRemote.prototype.kick = function(uid, sid, name) {
 		channel.leave(uid, sid);
 	}
 	var user = {uid:uid};
-	if(userInfo[uid]){
-        user = userInfo[uid]
+	if(this.userInfo[uid]){
+        user = this.userInfo[uid]
 	}
 	if(!isServer){
         var channelServer = this.channelService.getChannel(sid, false);
@@ -182,25 +173,22 @@ RoomRemote.prototype.kick = function(uid, sid, name) {
             user:user
         });
 
-        var index = roomList[name].players.findIndex(function(player){
+        var index = this.roomList[name].players.findIndex(function(player){
             return player.uid == uid;
         });
-        roomList[name].players.splice(index,1);
-        this.app.set('roomList',roomList);
+        this.roomList[name].players.splice(index,1);
     }else{
         !! channel&&channel.pushMessage({
             route: 'onServerLeave',
             user: user
         });
-        delete userInfo[uid]
-        this.app.set('userInfo',userInfo);
+        delete this.userInfo[uid];
     }
 };
 
 //开始游戏初始化
 RoomRemote.prototype.beginGame = function(uid,rid,sid,cb) {
-    var roomList = this.app.get("roomList");
-    if(!rid || !roomList[rid]){
+    if(!rid || !this.roomList[rid]){
         cb({
             code: 500,
             error: 1,
@@ -208,7 +196,7 @@ RoomRemote.prototype.beginGame = function(uid,rid,sid,cb) {
         });
         return;
     }
-    if(roomList[rid].players.length<2){
+    if(this.roomList[rid].players.length<2){
         cb({
             code: 500,
             error: 2,
@@ -216,7 +204,7 @@ RoomRemote.prototype.beginGame = function(uid,rid,sid,cb) {
         });
         return;
     }
-    if(roomList[rid].players[0].uid != uid){
+    if(this.roomList[rid].players[0].uid != uid){
         cb({
             code: 500,
             error: 3,
@@ -224,8 +212,7 @@ RoomRemote.prototype.beginGame = function(uid,rid,sid,cb) {
         });
         return;
     }
-    roomList[rid].state = 1;
-    this.app.set("roomList",roomList);
+    this.roomList[rid].state = 1;
     var channelServer = this.channelService.getChannel(sid, false);
     if( !! channelServer){//通知大厅更改房间状态
         channelServer.pushMessage({
@@ -263,8 +250,7 @@ function getAnswer(){
 
 //开始游戏逻辑
 RoomRemote.prototype.startGame = function(rid,index){
-    var roomList = this.app.get("roomList");
-    var room = roomList[rid];
+    var room = this.roomList[rid];
 
     this.gameData[rid] = {
         players: room.players,
@@ -273,9 +259,9 @@ RoomRemote.prototype.startGame = function(rid,index){
         gameTime: gameTime,
         imageData: '',
         currentTimes: 1,//当前轮数，一共2轮
+        answerRightNum: 0,//当前答对的人数
         answer: getAnswer()
     };
-    this.app.set("gameData",this.gameData);
     this.startCountTime(rid,this.gameData[rid]);
 };
 
@@ -300,10 +286,9 @@ RoomRemote.prototype.startCountTime = function(rid,currentGameData){
     var channel = this.channelService.getChannel(rid, false);
     var self = this;
     this.timeCounts[rid] = setTimeout(function(){
-        var roomList = self.app.get("roomList");
         var notOffLineNum = 0;
         currentGameData.players.forEach(function(p) {
-            if (roomList[rid].players.find(function (e) {
+            if (self.roomList[rid].players.find(function (e) {
                     return e.uid == p.uid;
                 })) {
                 p.isOffline = false;
@@ -364,13 +349,13 @@ RoomRemote.prototype.toNextPlayer = function(rid,currentGameData){
             currentGameData.currentPlayer++;
         }
         currentGameData.time = gameTime;
+        currentGameData.answerRightNum = 0;
         currentGameData.answer = getAnswer();
 
         setTimeout(function(){
             channel.pushMessage({
                 route: 'onChangeGamer'
             });
-            self.app.set("gameData",this.gameData);
             self.startCountTime(rid,currentGameData);
         },5000);
     }
@@ -380,11 +365,8 @@ RoomRemote.prototype.toNextPlayer = function(rid,currentGameData){
 RoomRemote.prototype.gameOver = function(rid,currentGameData){
     this.timeCounts[rid]&&clearTimeout(this.timeCounts[rid]);
     this.gameData[rid] = '';
-    this.app.set("gameData",this.gameData);
-    var roomList = this.app.get("roomList");
-    roomList[rid].state = 0;
-    this.app.set("roomList",roomList);
-    var channelServer = this.channelService.getChannel(roomList[rid].sid, false);
+    this.roomList[rid].state = 0;
+    var channelServer = this.channelService.getChannel(this.roomList[rid].sid, false);
     if( !! channelServer){//通知大厅更改房间状态
         channelServer.pushMessage({
             route: 'onRoomGameOver',
