@@ -251,15 +251,16 @@ function getAnswer(){
 //开始游戏逻辑
 RoomRemote.prototype.startGame = function(rid,index){
     var room = this.roomList[rid];
-
+    var players = Object.assign([],room.players);
     this.gameData[rid] = {
-        players: room.players,
+        players: players,
         currentPlayer: index,
         time: gameTime,
         gameTime: gameTime,
         imageData: '',
         currentTimes: 1,//当前轮数，一共2轮
         answerRightNum: 0,//当前答对的人数
+        answerRightUser: {},//记录答对的用户
         answer: getAnswer()
     };
     this.startCountTime(rid,this.gameData[rid]);
@@ -349,6 +350,7 @@ RoomRemote.prototype.toNextPlayer = function(rid,currentGameData){
             currentGameData.currentPlayer++;
         }
         currentGameData.time = gameTime;
+        currentGameData.answerRightUser = {};
         currentGameData.answerRightNum = 0;
         currentGameData.answer = getAnswer();
 

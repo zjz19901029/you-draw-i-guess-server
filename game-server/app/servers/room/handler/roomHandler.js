@@ -42,10 +42,12 @@ handler.sendMsg = function(msg, session, next) {
         },
         target: msg.target
     };
-    var score;
-    if(score = this.judgeAnswer(msg, rid, uid)){
-        param.answerRight = true;
-        param.score = score;
+    if(this.roomList[rid].state == 1){
+        var score;
+        if(score = this.judgeAnswer(param, rid, uid)){
+            param.answerRight = true;
+            param.score = score;
+        }
     }
 
 	channel = channelService.getChannel(rid, false);
@@ -69,12 +71,14 @@ handler.sendMsg = function(msg, session, next) {
 	});
 };
 
-handler.judgeAnswer = function(msg, rid, uid){//判断答案正确
+handler.judgeAnswer = function(param, rid, uid){//判断答案正确
     var gameData = this.gameData[rid];
     var score = 0;
     var currentPlayer = gameData.players[gameData.currentPlayer];
-    if(this.roomList[rid].state == 1&&currentPlayer.uid != uid){//正在游戏中，且当前用户不是画画者，判断是否猜对
-        if(msg.content.trim() == gameData.answer.word){
+    if(param.msg.trim() == gameData.answer.word){//答案正确
+        param.msg = '****';//将答案屏蔽
+        if(this.roomList[rid].state == 1 && currentPlayer.uid != uid && !gameData.answerRightUser[uid]){//正在游戏中，且当前用户不是画画者，判断是否猜对
+            gameData.answerRightUser[uid] = true;
             gameData.answerRightNum++;
             score = gameData.answerRightNum>3?scoreCount[3]:scoreCount[gameData.answerRightNum];
             currentPlayer.score++;
@@ -98,6 +102,8 @@ handler.judgeAnswer = function(msg, rid, uid){//判断答案正确
                 this.roomRemote.toNextPlayer(rid,gameData);
             }
             return score;
+        }else{
+            return false;
         }
     }
     return false;
